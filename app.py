@@ -119,7 +119,8 @@ fig, ax = plt.subplots(figsize=(10, 6))
 ax.plot(df["Month"], df["Tax-Free Bond Balance"], label="Tax-Free Bond Balance", color='blue')
 ax.plot(df["Month"], df["Loan Balance"], label="Loan Balance", color='red', linestyle='--')
 
-net_values = [initial + df["Tax-Free Bond Balance"][i] - df["Loan Balance"][i] - (tax * (i+1)/months 
+# Corrected line with proper parentheses and pandas access
+net_values = [initial + df["Tax-Free Bond Balance"].iloc[i] - df["Loan Balance"].iloc[i] - (tax * (i+1)/months) 
               for i in range(len(df))]
 ax.plot(df["Month"], net_values, label="Net Value After Tax", color='green', linewidth=2)
 

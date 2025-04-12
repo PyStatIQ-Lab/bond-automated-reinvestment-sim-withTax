@@ -112,13 +112,16 @@ st.dataframe(df.style.format({
     "Loan Balance": "₹{:,.0f}"
 }))
 
-# Visualization
-fig, ax = plt.subplots(figsize=(10,6))
+# Visualization - CORRECTED SECTION
+fig, ax = plt.subplots(figsize=(10, 6))
 ax.plot(df["Month"], df["Secondary Bond Balance"], label="Reinvested Amount", color='blue')
 ax.plot(df["Month"], df["Loan Balance"], label="Loan Balance", color='red', linestyle='--')
-ax.plot(df["Month"], [initial + df["Secondary Bond Balance"][i] - df["Loan Balance"][i] - 
-        (tax * (i+1)/months for i in range(len(df))], 
-        label="Net Value After Tax", color='green', linewidth=2)
+
+# Corrected line with proper parentheses
+net_values = [initial + df["Secondary Bond Balance"][i] - df["Loan Balance"][i] - (tax * (i+1)/months) 
+              for i in range(len(df))]
+ax.plot(df["Month"], net_values, label="Net Value After Tax", color='green', linewidth=2)
+
 ax.set_title("Investment Growth with Taxes")
 ax.set_xlabel("Months")
 ax.set_ylabel("Amount (₹)")

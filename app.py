@@ -30,7 +30,7 @@ with st.sidebar:
     st.header("Tax Parameters")
     entity = st.selectbox("Entity Type", ["Private Ltd (25%)", "LLP (31.2%)", "Custom Rate"])
     if entity == "Custom Rate":
-        tax_rate = st.slider("Tax Rate (%)", 15.0, 35.0, 25.0, 0.1)
+        tax_rate = st.slider("Tax Rate (%)", 0, 35.0, 25.0, 0.1)
     else:
         tax_rate = 25.0 if "Private" in entity else 31.2
 

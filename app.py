@@ -21,8 +21,8 @@ st.title("💰 Bond Reinvestment Simulator with Taxes (Pvt Ltd/LLP)")
 with st.sidebar:
     st.header("Investment Parameters")
     initial = st.number_input("Investor Capital (₹)", 100000, 10000000, 100000, 10000)
-    bond1_rate = st.slider("Primary Bond Rate (% p.a.)", 1.0, 30.0, 14.0, 0.1)
-    bond2_rate = st.slider("Secondary Bond Rate (% p.a.)", 1.0, 20.0, 12.0, 0.1)
+    taxable_rate = st.slider("Taxable Bond Rate (% p.a.)", 1.0, 30.0, 14.0, 0.1)
+    taxfree_rate = st.slider("Tax-Free Bond Rate (% p.a.)", 1.0, 20.0, 12.0, 0.1)
     loan_rate = st.slider("Borrowing Rate (% p.a.)", 1.0, 20.0, 10.0, 0.1)
     months = st.slider("Tenure (Months)", 1, 60, 12, 1)
     leverage = st.slider("Leverage Ratio", 1.0, 3.0, 1.0, 0.1)
@@ -36,29 +36,31 @@ with st.sidebar:
 
 # Calculations
 borrowed = initial * leverage
-monthly_b1 = bond1_rate / 12 / 100
-monthly_b2 = bond2_rate / 12 / 100
+monthly_taxable = taxable_rate / 12 / 100
+monthly_taxfree = taxfree_rate / 12 / 100
 monthly_loan = loan_rate / 12 / 100
 
 # Initialize trackers
-b1_principal = initial
-b2_principal = borrowed
+taxable_principal = initial
+taxfree_principal = borrowed
 loan_balance = borrowed
-cum_interest_income = 0
+cum_taxable_interest = 0
+cum_taxfree_interest = 0
 cum_loan_interest = 0
 records = []
 
 for month in range(1, months + 1):
     # Calculate monthly interest
-    b1_interest = b1_principal * monthly_b1
-    b2_interest = b2_principal * monthly_b2
+    taxable_interest = taxable_principal * monthly_taxable
+    taxfree_interest = taxfree_principal * monthly_taxfree
     
-    # Reinvest all interest into secondary bond
-    total_reinvest = b1_interest + b2_interest
-    b2_principal += total_reinvest
+    # Reinvest all interest into tax-free bond
+    total_reinvest = taxable_interest + taxfree_interest
+    taxfree_principal += total_reinvest
     
-    # Track interest for tax purposes
-    cum_interest_income += b1_interest + b2_interest
+    # Track interest for tax purposes (only taxable interest counts)
+    cum_taxable_interest += taxable_interest
+    cum_taxfree_interest += taxfree_interest
     
     # Loan interest accrual
     loan_interest = loan_balance * monthly_loan
@@ -67,10 +69,10 @@ for month in range(1, months + 1):
     
     records.append({
         "Month": month,
-        "Primary Bond Interest": b1_interest,
-        "Secondary Bond Interest": b2_interest,
+        "Taxable Bond Interest": taxable_interest,
+        "Tax-Free Bond Interest": taxfree_interest,
         "Reinvested Amount": total_reinvest,
-        "Secondary Bond Balance": b2_principal,
+        "Tax-Free Bond Balance": taxfree_principal,
         "Loan Interest": loan_interest,
         "Loan Balance": loan_balance
     })
@@ -78,47 +80,46 @@ for month in range(1, months + 1):
 df = pd.DataFrame(records)
 
 # Final values
-final_b2 = df.iloc[-1]["Secondary Bond Balance"]
+final_taxfree = df.iloc[-1]["Tax-Free Bond Balance"]
 final_loan = df.iloc[-1]["Loan Balance"]
 
-# Tax calculation
-taxable_income = cum_interest_income - cum_loan_interest
+# Tax calculation (only taxable interest is taxed)
+taxable_income = cum_taxable_interest - cum_loan_interest  # Only taxable interest can offset loan interest
 tax = max(0, taxable_income) * tax_rate / 100  # No tax on losses
 
 # Net position
-net_value = (b1_principal + final_b2) - final_loan - tax
+net_value = (taxable_principal + final_taxfree) - final_loan - tax
 net_return = net_value - initial
 annualized = (net_return / initial) * (12 / months) * 100
 
 # Display results
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Interest Earned", f"₹{cum_interest_income:,.0f}")
-col2.metric("Total Loan Interest", f"₹{cum_loan_interest:,.0f}")
+col1.metric("Total Taxable Interest", f"₹{cum_taxable_interest:,.0f}")
+col2.metric("Total Tax-Free Interest", f"₹{cum_taxfree_interest:,.0f}")
 col3.metric("Taxable Income", f"₹{taxable_income:,.0f}", f"Tax: ₹{tax:,.0f}")
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Final Secondary Bond", f"₹{final_b2:,.0f}")
+col1.metric("Final Tax-Free Bond", f"₹{final_taxfree:,.0f}")
 col2.metric("Final Loan Repayment", f"₹{final_loan:,.0f}")
 col3.metric("Investor's Net Return", f"₹{net_return:,.0f}", f"{annualized:.1f}% annualized")
 
 # Monthly breakdown
 st.subheader("Monthly Cash Flows")
 st.dataframe(df.style.format({
-    "Primary Bond Interest": "₹{:,.0f}",
-    "Secondary Bond Interest": "₹{:,.0f}",
+    "Taxable Bond Interest": "₹{:,.0f}",
+    "Tax-Free Bond Interest": "₹{:,.0f}",
     "Reinvested Amount": "₹{:,.0f}",
-    "Secondary Bond Balance": "₹{:,.0f}",
+    "Tax-Free Bond Balance": "₹{:,.0f}",
     "Loan Interest": "₹{:,.0f}",
     "Loan Balance": "₹{:,.0f}"
 }))
 
-# Visualization - CORRECTED SECTION
+# Visualization
 fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(df["Month"], df["Secondary Bond Balance"], label="Reinvested Amount", color='blue')
+ax.plot(df["Month"], df["Tax-Free Bond Balance"], label="Tax-Free Bond Balance", color='blue')
 ax.plot(df["Month"], df["Loan Balance"], label="Loan Balance", color='red', linestyle='--')
 
-# Corrected line with proper parentheses
-net_values = [initial + df["Secondary Bond Balance"][i] - df["Loan Balance"][i] - (tax * (i+1)/months) 
+net_values = [initial + df["Tax-Free Bond Balance"][i] - df["Loan Balance"][i] - (tax * (i+1)/months 
               for i in range(len(df))]
 ax.plot(df["Month"], net_values, label="Net Value After Tax", color='green', linewidth=2)
 
@@ -133,23 +134,24 @@ st.pyplot(fig)
 with st.expander("🔍 Calculation Methodology"):
     st.markdown(f"""
     **Monthly Calculations:**
-    1. Primary Bond Interest = ₹{initial:,.0f} × ({bond1_rate}/12)% = ₹{initial*monthly_b1:,.0f}/month
-    2. Secondary Bond Interest = (₹{borrowed:,.0f} + Reinvestments) × ({bond2_rate}/12)%
+    1. Taxable Bond Interest = ₹{initial:,.0f} × ({taxable_rate}/12)% = ₹{initial*monthly_taxable:,.0f}/month (taxable)
+    2. Tax-Free Bond Interest = (₹{borrowed:,.0f} + Reinvestments) × ({taxfree_rate}/12)% (tax-free)
     3. Loan Interest = ₹{borrowed:,.0f} × ({loan_rate}/12)% (compounding monthly)
     
     **Tax Treatment:**
-    - Taxable Income = Total Interest (₹{cum_interest_income:,.0f}) - Loan Interest (₹{cum_loan_interest:,.0f})
-    - Tax = {tax_rate}% of ₹{taxable_income:,.0f} = ₹{tax:,.0f}
+    - Only taxable interest is subject to tax
+    - Taxable Income = Taxable Interest (₹{cum_taxable_interest:,.0f}) - Loan Interest (₹{cum_loan_interest:,.0f})
+    - Tax = {tax_rate}% of ₹{max(0, taxable_income):,.0f} = ₹{tax:,.0f}
     
     **Final Return:**
-    - Net Value = (Primary ₹{initial:,.0f} + Secondary ₹{final_b2:,.0f}) - Loan ₹{final_loan:,.0f} - Tax ₹{tax:,.0f}
+    - Net Value = (Initial ₹{initial:,.0f} + Tax-Free Bond ₹{final_taxfree:,.0f}) - Loan ₹{final_loan:,.0f} - Tax ₹{tax:,.0f}
     - Profit = ₹{net_return:,.0f} on ₹{initial:,.0f} investment
     """)
 
 st.warning("""
 **Note:** This assumes:
-1. Interest income taxed as business income
-2. Loan interest fully deductible
-3. No TDS or surcharges beyond base rate
+1. Only the taxable bond interest is subject to tax (14% in this case)
+2. The tax-free bond interest (12%) is completely tax exempt
+3. Loan interest can only offset taxable income
 4. Reinvestment happens immediately each month
 """)

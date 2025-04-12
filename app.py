@@ -8,180 +8,145 @@ st.set_page_config(page_title="Tax-Aware Bond Reinvestment Simulator", layout="w
 # Custom styling
 st.markdown("""
 <style>
-    .main {background-color: #f5f5f5;}
+    .metric {font-size: 1.2rem !important;}
     .stSlider>div>div>div>div {background: #4f8bf9;}
-    .reportview-container .main .block-container {padding-top: 2rem;}
-    h1 {color: #2a3f5f;}
-    .css-1aumxhk {background-color: #ffffff; border-radius: 10px; padding: 20px;}
+    .stDataFrame {font-size: 14px;}
 </style>
 """, unsafe_allow_html=True)
 
-# Title and description
-st.title("💰 Tax-Aware Bond Reinvestment Simulator (Pvt Ltd/LLP)")
-st.markdown("""
-**🧠 Scenario:**  
-Invest in bonds with leverage + Reinvest all interest + Calculate post-tax returns for Pvt Ltd/LLP
-""")
+# Title
+st.title("💰 Bond Reinvestment Simulator with Taxes (Pvt Ltd/LLP)")
 
-# Sidebar controls
+# Input parameters
 with st.sidebar:
     st.header("Investment Parameters")
-    initial_investment = st.number_input("Initial Investment (₹)", min_value=10000, value=100000, step=10000)
-    high_yield_rate = st.slider("High-Yield Bond Rate (% p.a.)", 1.0, 30.0, 14.0, 0.1)
-    treasury_rate = st.slider("Treasury Bond Rate (% p.a.)", 1.0, 20.0, 12.0, 0.1)
-    borrowing_rate = st.slider("Borrowing Rate (% p.a.)", 1.0, 20.0, 10.0, 0.1)
-    months = st.slider("Investment Period (Months)", 1, 60, 12, 1)
-    leverage_ratio = st.slider("Leverage Ratio", 1.0, 3.0, 1.0, 0.1)
+    initial = st.number_input("Investor Capital (₹)", 100000, 10000000, 100000, 10000)
+    bond1_rate = st.slider("Primary Bond Rate (% p.a.)", 1.0, 30.0, 14.0, 0.1)
+    bond2_rate = st.slider("Secondary Bond Rate (% p.a.)", 1.0, 20.0, 12.0, 0.1)
+    loan_rate = st.slider("Borrowing Rate (% p.a.)", 1.0, 20.0, 10.0, 0.1)
+    months = st.slider("Tenure (Months)", 1, 60, 12, 1)
+    leverage = st.slider("Leverage Ratio", 1.0, 3.0, 1.0, 0.1)
     
     st.header("Tax Parameters")
-    entity_type = st.selectbox("Entity Type", ["Private Limited Company", "LLP"])
-    if entity_type == "Private Limited Company":
-        tax_rate = st.slider("Corporate Tax Rate (%)", 15.0, 35.0, 25.0, 0.1)
+    entity = st.selectbox("Entity Type", ["Private Ltd (25%)", "LLP (31.2%)", "Custom Rate"])
+    if entity == "Custom Rate":
+        tax_rate = st.slider("Tax Rate (%)", 15.0, 35.0, 25.0, 0.1)
     else:
-        tax_rate = st.slider("LLP Tax Rate (%)", 15.0, 35.0, 31.2, 0.1)
+        tax_rate = 25.0 if "Private" in entity else 31.2
 
-# Calculate borrowed amount
-borrowed_amount = initial_investment * leverage_ratio
+# Calculations
+borrowed = initial * leverage
+monthly_b1 = bond1_rate / 12 / 100
+monthly_b2 = bond2_rate / 12 / 100
+monthly_loan = loan_rate / 12 / 100
 
-# Monthly rates
-monthly_high = high_yield_rate / 12 / 100
-monthly_treasury = treasury_rate / 12 / 100
-monthly_borrow = borrowing_rate / 12 / 100
-
-# Initialize variables
-high_yield_principal = initial_investment
-treasury_principal = borrowed_amount
-borrowed_balance = borrowed_amount
-total_reinvested = 0
-loan_interest_paid = 0
-total_interest_income = 0
-
-# Track monthly values
+# Initialize trackers
+b1_principal = initial
+b2_principal = borrowed
+loan_balance = borrowed
+cum_interest_income = 0
+cum_loan_interest = 0
 records = []
 
 for month in range(1, months + 1):
-    # Calculate interest from bonds
-    high_yield_interest = high_yield_principal * monthly_high
-    treasury_interest = treasury_principal * monthly_treasury
+    # Calculate monthly interest
+    b1_interest = b1_principal * monthly_b1
+    b2_interest = b2_principal * monthly_b2
     
-    # Track total interest income (taxable)
-    total_interest_income += high_yield_interest + treasury_interest
+    # Reinvest all interest into secondary bond
+    total_reinvest = b1_interest + b2_interest
+    b2_principal += total_reinvest
     
-    # Reinvest all interest into treasury bond
-    total_reinvestment = high_yield_interest + treasury_interest
-    treasury_principal += total_reinvestment
-    total_reinvested += total_reinvestment
+    # Track interest for tax purposes
+    cum_interest_income += b1_interest + b2_interest
     
-    # Accrue loan interest (tax-deductible)
-    monthly_loan_interest = borrowed_balance * monthly_borrow
-    loan_interest_paid += monthly_loan_interest
+    # Loan interest accrual
+    loan_interest = loan_balance * monthly_loan
+    cum_loan_interest += loan_interest
+    loan_balance += loan_interest  # Compounding loan interest
     
-    # Record monthly values
     records.append({
         "Month": month,
-        "High-Yield Interest": high_yield_interest,
-        "Treasury Interest": treasury_interest,
-        "Total Interest Income": high_yield_interest + treasury_interest,
-        "Loan Interest Paid": monthly_loan_interest,
-        "Taxable Income": (high_yield_interest + treasury_interest) - monthly_loan_interest,
-        "Treasury Balance": treasury_principal,
-        "Cumulative Loan Interest": loan_interest_paid
+        "Primary Bond Interest": b1_interest,
+        "Secondary Bond Interest": b2_interest,
+        "Reinvested Amount": total_reinvest,
+        "Secondary Bond Balance": b2_principal,
+        "Loan Interest": loan_interest,
+        "Loan Balance": loan_balance
     })
 
-# Create DataFrame
 df = pd.DataFrame(records)
 
-# Final calculations
-final_treasury = df.iloc[-1]["Treasury Balance"]
-total_loan_cost = borrowed_amount + df.iloc[-1]["Cumulative Loan Interest"]
+# Final values
+final_b2 = df.iloc[-1]["Secondary Bond Balance"]
+final_loan = df.iloc[-1]["Loan Balance"]
 
-# Tax Calculation
-total_taxable_income = df["Taxable Income"].sum()
-tax_paid = total_taxable_income * (tax_rate / 100)
+# Tax calculation
+taxable_income = cum_interest_income - cum_loan_interest
+tax = max(0, taxable_income) * tax_rate / 100  # No tax on losses
 
-# Investor's final position
-investor_final = (high_yield_principal + final_treasury) - total_loan_cost - tax_paid
-net_profit = investor_final - initial_investment
-annualized_return = (net_profit / initial_investment) * (12/months) * 100
-
-# Display summary
-st.subheader("📊 Investment Summary")
-col1, col2, col3 = st.columns(3)
-col1.metric("Your Investment", f"₹{initial_investment:,.0f}")
-col2.metric("Borrowed Amount", f"₹{borrowed_amount:,.0f} ({leverage_ratio:,.1f}X)")
-col3.metric("Total Invested", f"₹{initial_investment + borrowed_amount:,.0f}")
+# Net position
+net_value = (b1_principal + final_b2) - final_loan - tax
+net_return = net_value - initial
+annualized = (net_return / initial) * (12 / months) * 100
 
 # Display results
-st.subheader("💵 Final Results (After Tax)")
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Interest Income", f"₹{total_interest_income:,.0f}")
-col2.metric("Tax Liability (@{tax_rate}%)", f"₹{tax_paid:,.0f}")
-col3.metric("Your Net Profit", f"₹{net_profit:,.0f}", f"{annualized_return:.1f}% annualized")
+col1.metric("Total Interest Earned", f"₹{cum_interest_income:,.0f}")
+col2.metric("Total Loan Interest", f"₹{cum_loan_interest:,.0f}")
+col3.metric("Taxable Income", f"₹{taxable_income:,.0f}", f"Tax: ₹{tax:,.0f}")
 
-# Tax breakdown
-st.subheader("🧾 Tax Calculation")
-tax_df = pd.DataFrame({
-    "Component": ["Total Interest Income", "Loan Interest Deduction", "Taxable Income", "Tax Paid"],
-    "Amount (₹)": [
-        total_interest_income,
-        -loan_interest_paid,
-        total_taxable_income,
-        -tax_paid
-    ]
-})
-st.dataframe(tax_df.style.format({"Amount (₹)": "₹{:,.0f}"}))
+col1, col2, col3 = st.columns(3)
+col1.metric("Final Secondary Bond", f"₹{final_b2:,.0f}")
+col2.metric("Final Loan Repayment", f"₹{final_loan:,.0f}")
+col3.metric("Investor's Net Return", f"₹{net_return:,.0f}", f"{annualized:.1f}% annualized")
 
 # Monthly breakdown
-st.subheader("📅 Monthly Breakdown")
+st.subheader("Monthly Cash Flows")
 st.dataframe(df.style.format({
-    "High-Yield Interest": "₹{:,.0f}",
-    "Treasury Interest": "₹{:,.0f}",
-    "Total Interest Income": "₹{:,.0f}",
-    "Loan Interest Paid": "₹{:,.0f}",
-    "Taxable Income": "₹{:,.0f}",
-    "Treasury Balance": "₹{:,.0f}",
-    "Cumulative Loan Interest": "₹{:,.0f}"
+    "Primary Bond Interest": "₹{:,.0f}",
+    "Secondary Bond Interest": "₹{:,.0f}",
+    "Reinvested Amount": "₹{:,.0f}",
+    "Secondary Bond Balance": "₹{:,.0f}",
+    "Loan Interest": "₹{:,.0f}",
+    "Loan Balance": "₹{:,.0f}"
 }))
 
-# Visualizations
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(df["Month"], df["Treasury Balance"], label="Reinvested Amount", color='#4f8bf9')
-ax.plot(df["Month"], [borrowed_amount + x for x in df["Cumulative Loan Interest"]], 
-        label="Loan Balance", color='#d62728', linestyle='--')
-ax.plot(df["Month"], [initial_investment + x - tax_paid * (month/months) for month, x in enumerate(df["Treasury Balance"] - df["Cumulative Loan Interest"] - borrowed_amount, 1)], 
-        label="Your Net Value (After Tax)", color='#2ca02c', linewidth=3)
-ax.set_title("Investment Growth with Taxes", fontsize=16)
-ax.set_xlabel("Months", fontsize=12)
-ax.set_ylabel("Amount (₹)", fontsize=12)
-ax.grid(True, alpha=0.3)
+# Visualization
+fig, ax = plt.subplots(figsize=(10,6))
+ax.plot(df["Month"], df["Secondary Bond Balance"], label="Reinvested Amount", color='blue')
+ax.plot(df["Month"], df["Loan Balance"], label="Loan Balance", color='red', linestyle='--')
+ax.plot(df["Month"], [initial + df["Secondary Bond Balance"][i] - df["Loan Balance"][i] - 
+        (tax * (i+1)/months for i in range(len(df))], 
+        label="Net Value After Tax", color='green', linewidth=2)
+ax.set_title("Investment Growth with Taxes")
+ax.set_xlabel("Months")
+ax.set_ylabel("Amount (₹)")
 ax.legend()
+ax.grid(True, alpha=0.3)
 st.pyplot(fig)
 
-# Key tax notes
-with st.expander("📌 Important Tax Rules for Pvt Ltd/LLP"):
-    st.markdown("""
-    **For Private Limited Companies:**
-    - Interest income taxed as **business income** @25% (if turnover < ₹400 Cr)
-    - Loan interest is **fully deductible** as business expense
-    - Reinvestment gains taxed as ordinary income
-
-    **For LLPs:**
-    - Taxed at **30% + surcharge** (~31.2% effective)
-    - Same treatment for interest income/expenses
-    - No dividend distribution tax (unlike Pvt Ltd)
-
-    **Key Considerations:**
-    1. Maintain proper documentation of interest payments
-    2. Ensure bonds are held as investments (not trading assets)
-    3. Tax deducted at source (TDS) may apply on bond interest
-    4. MAT (Minimum Alternate Tax) may apply for companies
+# Key formulas
+with st.expander("🔍 Calculation Methodology"):
+    st.markdown(f"""
+    **Monthly Calculations:**
+    1. Primary Bond Interest = ₹{initial:,.0f} × ({bond1_rate}/12)% = ₹{initial*monthly_b1:,.0f}/month
+    2. Secondary Bond Interest = (₹{borrowed:,.0f} + Reinvestments) × ({bond2_rate}/12)%
+    3. Loan Interest = ₹{borrowed:,.0f} × ({loan_rate}/12)% (compounding monthly)
+    
+    **Tax Treatment:**
+    - Taxable Income = Total Interest (₹{cum_interest_income:,.0f}) - Loan Interest (₹{cum_loan_interest:,.0f})
+    - Tax = {tax_rate}% of ₹{taxable_income:,.0f} = ₹{tax:,.0f}
+    
+    **Final Return:**
+    - Net Value = (Primary ₹{initial:,.0f} + Secondary ₹{final_b2:,.0f}) - Loan ₹{final_loan:,.0f} - Tax ₹{tax:,.0f}
+    - Profit = ₹{net_return:,.0f} on ₹{initial:,.0f} investment
     """)
 
-# Risk disclosure
-st.error("""
-**⚠️ Important Risks:**
-1. Higher leverage increases both potential returns and risks
-2. Tax laws may change - consult a CA for exact treatment
-3. Assumes all interest is reinvested immediately (may have operational delays)
-4. Bond default risk not considered in calculations
+st.warning("""
+**Note:** This assumes:
+1. Interest income taxed as business income
+2. Loan interest fully deductible
+3. No TDS or surcharges beyond base rate
+4. Reinvestment happens immediately each month
 """)
